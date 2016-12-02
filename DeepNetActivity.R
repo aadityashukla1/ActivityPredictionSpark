@@ -68,10 +68,9 @@ modelActivity2 <- h2o.deeplearning(
     x=predictors,
     y=response,
     hidden=c(100,100),
-    epochs=1000000,
+    epochs=10,
     stopping_metric = "misclassification",
-    score_validation_samples=10000,
-    stopping_rounds=20,
-    stopping_tolerance=0.0000001
+    activation = "TanhWithDropout",
+    loss = "CrossEntropy"
 )
 summary(modelActivity2)
