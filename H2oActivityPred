@@ -1,0 +1,112 @@
+
+getObjectStorageFile <- function(credentials) {
+    if(!require(httr)) install.packages('httr')
+    if(!require(RCurl)) install.packages('RCurl')
+    library(httr, RCurl)
+    auth_url <- paste(credentials[['auth_url']],'/v3/auth/tokens', sep= '')
+    auth_args <- paste('{"auth": {"identity": {"password": {"user": {"domain": {"id": ', credentials[['domain_id']],'},"password": ',
+                   credentials[['password']],',"name": ', credentials[['username']],'}},"methods": ["password"]}}}', sep='"')
+    auth_response <- httr::POST(url = auth_url, body = auth_args)
+    x_subject_token <- headers(auth_response)[['x-subject-token']]
+    auth_body <- content(auth_response)
+    access_url <- unlist(lapply(auth_body[['token']][['catalog']], function(catalog){
+        if((catalog[['type']] == 'object-store')){
+            lapply(catalog[['endpoints']], function(endpoints){
+                if(endpoints[['interface']] == 'public' && endpoints[['region_id']] == 'dallas') {
+                   paste(endpoints[['url']], credentials[['container']], credentials[['filename']], sep='/')}
+            })
+        }
+    })) 
+    data <- content(httr::GET(url = access_url, add_headers ("Content-Type" = "application/json", "X-Auth-Token" = x_subject_token)), as="text")
+    textConnection(data)
+}
+
+#instead of storage read input from your local directory, I am using cred to run on cloud
+df <- read.csv(file = getObjectStorageFile(credentials_1), header = FALSE)
+head(df,10)
+
+install.packages("splitstackshape")
+library(splitstackshape)
+
+df$V6 <- as.character(df$V6)
+df$V5 <- as.character(df$V5)
+df$V5 <- as.numeric(df$V5)
+
+#remove the char ';' from last column
+df <- concat.split(data = df,split.col = "V6", sep = ";")
+
+str(df)
+
+#drop column V6 from df.Sep
+df <- subset(df, select = -c(V6))
+df <- subset(df, select = -c(V6_2))
+
+
+#now rename the dataframe columns
+colnames(df) <- c("user", "activity", "timestamp", "xaccel", "yaccel", "zaccel")
+
+df <- subset(df, select = -c(timestamp,user))
+
+#install.packages("data.table")
+#library(data.table)
+
+#table(df$activity)
+
+install.packages('plyr')
+library(plyr)
+
+count(df, 'activity')
+
+
+toBeRemoved<-which(df$activity=="")
+df<-df[-toBeRemoved,]
+
+toBeRemoved<-which(df$activity=="0")
+df<-df[-toBeRemoved,]
+
+toBeRemoved<-which(df$activity=="1202262279000")
+df<-df[-toBeRemoved,]
+
+toBeRemoved<-which(df$activity=="295812327000")
+df<-df[-toBeRemoved,]
+
+toBeRemoved<-which(df$activity=="328982249000")
+df<-df[-toBeRemoved,]
+
+df$activity <- factor(df$activity)
+
+count(df, 'activity')
+
+str(df)
+
+install.packages("h2o", type="source", repos=(c("https://h2o-release.s3.amazonaws.com/h2o/rel-turing/7/R")))
+library(h2o)
+localH2O = h2o.init(nthreads=-1)
+
+#sqlContext <- sparkRSQL.init(sc)
+
+df.hex <- as.h2o(df)
+
+splits <- h2o.splitFrame(df.hex, c(0.6,0.2), seed=1234)
+train  <- h2o.assign(splits[[1]], "train.hex") # 60%
+valid  <- h2o.assign(splits[[2]], "valid.hex") # 20%
+test   <- h2o.assign(splits[[3]], "test.hex")  # 20%
+
+response <- "activity"
+predictors <- setdiff(names(df.hex), response)
+predictors
+
+# get a hang of model
+modelActivity3 <- h2o.deeplearning(
+     model_id="dl_model_Activity", 
+     training_frame=train, 
+     validation_frame=valid,
+     x=predictors,
+     y=response,
+     hidden=c(200,200,200,200,200),
+     stopping_metric = "misclassification",
+     loss = "CrossEntropy",
+     stopping_rounds = 5,
+     epochs = 10,
+     score_interval = 5
+ )
