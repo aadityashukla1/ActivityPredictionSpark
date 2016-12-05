@@ -123,3 +123,21 @@ deepModelActi<- h2o.deeplearning(
     score_interval = 14,
     pretrained_autoencoder ="dl_model_autoEncoder"
 )
+
+# good two
+> deepModelActi1<- h2o.deeplearning(
+          model_id="dl_model1", 
+          training_frame=train, 
+          validation_frame=valid,
+          x=predictors,
+          y=response,
+          hidden=c(200,200,200,200,200),
+          activation = "Tanh",
+          adaptive_rate = FALSE,
+          nesterov_accelerated_gradient = TRUE,
+          rate = 0.005,
+          stopping_metric = "misclassification",
+          loss = "CrossEntropy",
+          epochs = 500000,
+          pretrained_autoencoder ="dl_model_autoEncoder"
+      )
